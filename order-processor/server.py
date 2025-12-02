@@ -32,7 +32,6 @@ class OrderProcessorServicer(order_pb2_grpc.OrderProcessorServicer):
         logger.info(f"Order processed successfylly, ID: {order_id}")
         logger.info(f"Databasehas {len(orders_db)} Orders")
         
-        # Zwrócenie odpowiedzi
         return order_pb2.OrderResponse(
             order_id=order_id,
             status="accepted"
