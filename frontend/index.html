@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order System - Mini Store</title>
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --primary-hover: #45a049;
+            --bg-color: #f5f5f5;
+            --card-bg: #ffffff;
+            --text-color: #333;
+            --border-color: #ddd;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+
+        .global-settings {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border-left: 5px solid var(--primary-color);
+        }
+
+        .global-settings label {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        input[type="email"] {
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .product-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .product-image-placeholder {
+            background-color: #eee;
+            height: 150px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3em;
+            color: #ccc;
+        }
+
+        .product-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .product-id {
+            color: #777;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+            background: #f0f0f0;
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+
+        .buy-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+
+        .buy-btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .buy-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        #response-area {
+            display: none;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .success {
+            border-left: 5px solid #28a745;
+        }
+
+        .error {
+            border-left: 5px solid #dc3545;
+        }
+
+        .links-container {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .action-link {
+            display: inline-block;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            padding: 8px 15px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        .action-link:hover {
+            background-color: #0056b3;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🛒 Electronics Mini-Store</h1>
+    </header>
+
+    <div class="container">
+        <div class="global-settings">
+            <label for="globalEmail">📧 Customer Email (Required for all orders)</label>
+            <input type="email" id="globalEmail" placeholder="Enter your email address (e.g., client@example.com)" required>
+        </div>
+
+        <div id="productsContainer" class="products-grid">
+            </div>
+
+        <div id="response-area"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+
+        const products = [
+            { id: 'PROD-001', name: 'Mocbook Stone"', icon: '💻' },
+            { id: 'PROD-002', name: 'YouPhone X', icon: '📱' },
+            { id: 'PROD-007', name: 'Just headphones', icon: '🎧' }
+        ];
+
+        // hateoas action config
+        const actionConfig = {
+            'cancel': { method: 'DELETE', label: '❌ Cancel Order', class: 'error' },
+            'status': { method: 'GET', label: '🔄 Refresh Status', class: 'action-link' },
+            'self': { hidden: true }
+        };
+
+        const productsContainer = document.getElementById('productsContainer');
+        productsContainer.innerHTML = products.map(product => `
+            <div class="product-card">
+                <div class="product-image-placeholder">${product.icon}</div>
+                <div class="product-info">
+                    <div class="product-name">${product.name}</div>
+                    <div class="product-id">${product.id}</div>
+                </div>
+                <button class="buy-btn" onclick="createOrder('${product.id}', this)">Buy Now</button>
+            </div>
+        `).join('');
+
+        // order creation
+        async function createOrder(productId, btnElement) {
+            const email = document.getElementById('globalEmail').value.trim();
+            const responseArea = document.getElementById('response-area');
+
+            if (!email) {
+                alert("Please enter email first!");
+                return;
+            }
+
+            const originalText = btnElement.innerText;
+            btnElement.disabled = true;
+            btnElement.innerText = 'Processing...';
+
+            try {
+                const response = await fetch(`${API_URL}/orders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ product_id: productId, email: email, quantity: 1 })
+                });
+                
+                const data = await response.json();
+                renderResponse(data, response.ok);
+
+            } catch (error) {
+                renderResponse({ detail: "Connection Error" }, false);
+            } finally {
+                btnElement.disabled = false;
+                btnElement.innerText = originalText;
+            }
+        }
+
+        // hateoas action handler
+        async function handleAction(url, method) {
+            const responseArea = document.getElementById('response-area');
+            //somethings changing
+            responseArea.style.opacity = '0.5'; 
+
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                // refresh  to see new backend data
+                renderResponse(data, response.ok);
+                
+            } catch (error) {
+                alert("Action failed: " + error.message);
+            } finally {
+                responseArea.style.opacity = '1';
+            }
+        }
+
+        function renderResponse(data, isSuccess) {
+            const responseArea = document.getElementById('response-area');
+            responseArea.style.display = 'block';
+
+            if (!isSuccess) {
+                responseArea.className = 'error';
+                responseArea.innerHTML = `<h3>❌ Error</h3><p>${data.detail || 'Unknown error'}</p>`;
+                return;
+            }
+
+            // button generator based on backend
+            const actionsHtml = generateActionButtons(data._links || data.links);
+
+            responseArea.className = 'success';
+            responseArea.innerHTML = `
+                <h2>📦 Order Info</h2>
+                <p><strong>ID:</strong> ${data.order_id}</p>
+                <p><strong>Status:</strong> <span style="font-weight:bold; text-transform:uppercase">${data.status}</span></p>
+                
+                <div class="links-container" style="margin-top:20px; border-top:1px solid #ccc; padding-top:10px">
+                    <h3>Available Actions:</h3>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap">
+                        ${actionsHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        // buttons
+        function generateActionButtons(links) {
+            if (!links) return '<p>No actions available.</p>';
+
+            return Object.entries(links).map(([rel, linkObj]) => {
+                const config = actionConfig[rel];
+
+                if (!config || config.hidden) return '';
+
+                return `
+                    <button 
+                        onclick="handleAction('${linkObj.href}', '${config.method}')"
+                        style="padding:8px 16px; cursor:pointer; background:${rel === 'cancel' ? '#dc3545' : '#007bff'}; color:white; border:none; border-radius:4px;">
+                        ${config.label}
+                    </button>
+                `;
+            }).join('');
+        }
+    </script>
+</body>
+</html>

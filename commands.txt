@@ -1,0 +1,54 @@
+
+----------
+VENV USAGE
+
+cd \order-system\api-gateway
+
+python -m venv venv
+
+venv\Scripts\activate
+
+pip install fastapi uvicorn zeep grpcio grpcio-tools pika requests pytest protobuf httpx
+
+pytest -q
+
+---------
+IN CONTAINTER 
+
+docker exec -it order-system-api-gateway bash
+pip install httpx
+pip install grpcio==1.65.5 grpcio-tools==1.65.5 --upgrade
+
+
+----------
+py-PROTOGEN
+
+cd order-system/order-processor
+python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. order.proto
+copy order_pb2.py ..\api-gateway\
+copy order_pb2_grpc.py ..\api-gateway\
+
+pytest -q
+
+-----------
+DOCKERCOMMS
+
+docker-compose up --build
+
+docker-compose logs -f api-gateway
+docker-compose logs -f notification-service
+docker-compose logs -f order-processor
+
+docker-compose restart rabbitmq OR XXX .....
+
+docker-compose stop
+docker-compose start
+docker-compose down
+docker-compose down -v
+
+-----------
+OTHER
+curl http://localhost:8000/health
+docker-compose exec api-gateway pytest -m integration -v
+docker-compose exec api-gateway pytest tests/test_api_gateway.py -v
+docker-compose exec api-gateway pytest -v

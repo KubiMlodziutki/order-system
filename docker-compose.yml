@@ -1,0 +1,107 @@
+services:
+  # rabbit
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: order-system-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - order-network
+
+  # eureka
+  eureka:
+    build:
+      context: ./eureka-server
+      dockerfile: Dockerfile
+    container_name: order-system-eureka
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget --spider -q http://localhost:8761/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      - order-network
+
+  # soap
+  product-validator:
+    build:
+      context: ./product-validator
+      dockerfile: Dockerfile
+    container_name: order-system-product-validator
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget --spider -q http://localhost:8080/ws/ProductValidator?wsdl || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      - order-network
+
+  # grpc
+  order-processor:
+    build:
+      context: ./order-processor
+      dockerfile: Dockerfile
+    container_name: order-system-order-processor
+    ports:
+      - "50051:50051"
+    networks:
+      - order-network
+
+  # rabbitmq consumer
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: order-system-notification-service
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - order-network
+
+  # api gayeway
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: order-system-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      SOAP_SERVICE_URL: http://product-validator:8080/ws/ProductValidator?wsdl
+      GRPC_SERVICE_HOST: order-processor
+      GRPC_SERVICE_PORT: 50051
+      RABBITMQ_HOST: rabbitmq
+      API_GATEWAY_URL: http://localhost:8000
+    depends_on:
+      product-validator:
+        condition: service_healthy
+      order-processor:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - order-network
+
+networks:
+  order-network:
+    driver: bridge
