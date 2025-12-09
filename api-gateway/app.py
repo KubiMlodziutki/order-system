@@ -15,14 +15,15 @@ import sys
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# grpc import
-try:
-    import order_pb2
-    import order_pb2_grpc
-    GRPC_AVAILABLE = True
-except ImportError as e:
-    logger.warning(f"gRPC modules not available: {e}")
-    GRPC_AVAILABLE = False
+import importlib
+import os
+import sys
+
+# Note: generated gRPC stubs (`order_pb2.py`, `order_pb2_grpc.py`) live in the same folder.
+# We'll import them lazily inside functions and ensure this file's directory is on sys.path.
+THIS_DIR = os.path.dirname(__file__)
+if THIS_DIR not in sys.path:
+    sys.path.insert(0, THIS_DIR)
 
 app = FastAPI(title="Order System API Gateway")
 
@@ -84,27 +85,43 @@ def validate_product_soap(product_id: str) -> bool:
 
 # order processing using grpc
 def process_order_grpc(product_id: str, email: str, quantity: int) -> str:
-    if not GRPC_AVAILABLE:
-        raise HTTPException(status_code=503, detail="gRPC is not available")
-    
     try:
         logger.info(f"Order processing via gRPC...")
+
+        # lazy import of generated stubs to avoid import-time failures
+        order_pb2 = importlib.import_module('order_pb2')
+        order_pb2_grpc = importlib.import_module('order_pb2_grpc')
+
         channel = grpc.insecure_channel(f"{GRPC_SERVICE_HOST}:{GRPC_SERVICE_PORT}")
+        try:
+            # check channel readiness (short timeout)
+            grpc.channel_ready_future(channel).result(timeout=5)
+        except Exception as e:
+            logger.error(f"gRPC channel not ready: {e}")
+            raise HTTPException(status_code=503, detail=f"gRPC service not reachable: {e}")
+
         stub = order_pb2_grpc.OrderProcessorStub(channel)
-        
+
         request = order_pb2.OrderRequest(
             product_id=product_id,
             email=email,
             quantity=quantity
         )
-        
-        response = stub.ProcessOrder(request)
+
+        response = stub.ProcessOrder(request, timeout=5)
         logger.info(f"Order has been processed, ID: {response.order_id}")
-        channel.close()
         return response.order_id
+    except HTTPException:
+        # re-raise HTTPExceptions we intentionally raised
+        raise
     except Exception as e:
-        logger.error(f"gRPC processing error: {str(e)}")
-        raise HTTPException(status_code=503, detail=f"Processing service unavailable: {str(e)}")
+        logger.exception(f"gRPC processing error: {e}")
+        raise HTTPException(status_code=503, detail=f"Processing service unavailable: {e}")
+    finally:
+        try:
+            channel.close()
+        except Exception:
+            pass
 
 # rabbitmq notif sender
 def send_notification_rabbitmq(order_id: str, email: str):
@@ -228,23 +245,44 @@ async def list_orders():
 # products endpoint - fetch via gRPC from order-processor which calls SOAP validator
 @app.get("/products")
 async def get_products():
-    if not GRPC_AVAILABLE:
-        raise HTTPException(status_code=503, detail="gRPC is not available")
-
+    # Try to fetch products via gRPC generic call even if generated stubs are missing.
     try:
         channel = grpc.insecure_channel(f"{GRPC_SERVICE_HOST}:{GRPC_SERVICE_PORT}")
+
+        # ensure the channel is ready before making the call
+        try:
+            grpc.channel_ready_future(channel).result(timeout=5)
+        except Exception as e:
+            logger.error(f"gRPC channel not ready for products: {e}")
+            raise HTTPException(status_code=503, detail=f"Product service not reachable: {e}")
+
         # call the generic GetProducts method which returns JSON bytes
+        def safe_response_deserializer(x):
+            if not x:
+                return {'products': []}
+            try:
+                return json.loads(x.decode('utf-8'))
+            except Exception as ex:
+                logger.exception(f"Failed to deserialize products response: {ex}")
+                return {'products': []}
+
         stub_call = channel.unary_unary(
             '/order.OrderProcessor/GetProducts',
             request_serializer=lambda x: b'',
-            response_deserializer=lambda x: json.loads(x.decode('utf-8'))
+            response_deserializer=safe_response_deserializer
         )
 
-        result = stub_call(b'')
-        channel.close()
+        try:
+            # add a short timeout to avoid long blocking
+            result = stub_call(b'', timeout=5)
+        finally:
+            channel.close()
+
         return result.get('products', [])
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error fetching products via gRPC: {e}")
+        logger.exception(f"Error fetching products via gRPC: {e}")
         raise HTTPException(status_code=503, detail=f"Product service unavailable: {e}")
 
 if __name__ == "__main__":

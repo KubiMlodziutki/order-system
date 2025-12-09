@@ -61,6 +61,12 @@ services:
       - "50051:50051"
     networks:
       - order-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket,sys; s=__import__('socket').socket(); s.settimeout(1); s.connect(('127.0.0.1',50051))\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   # rabbitmq consumer
   notification-service:
@@ -95,7 +101,7 @@ services:
       product-validator:
         condition: service_healthy
       order-processor:
-        condition: service_started
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     restart: on-failure

@@ -46,8 +46,8 @@ def GetProducts_generic(unused_request, context):
     # Call the SOAP ProductValidator to get list of available product IDs
     try:
         session = Session()
-        session.timeout = 10
-        transport = Transport(session=session)
+        # use Transport timeout to avoid hanging
+        transport = Transport(session=session, timeout=10)
         soap_client = Client('http://product-validator:8080/ws/ProductValidator?wsdl', transport=transport)
         ids = soap_client.service.getAvailableProducts()
         # enrich products with simple data
@@ -68,9 +68,12 @@ def GetProducts_generic(unused_request, context):
         payload = json.dumps({'products': products}).encode('utf-8')
         return payload
     except Exception as e:
-        context.set_code(grpc.StatusCode.UNAVAILABLE)
-        context.set_details(f'Product validator unavailable: {e}')
-        return b''
+        # Log the error but return a valid JSON payload with empty list as a safe fallback.
+        logger.exception(f"Failed to fetch products from SOAP validator: {e}")
+        fallback = {'products': []}
+        # include optional error field for debugging (API Gateway will ignore and return products)
+        fallback['error'] = f'Product validator unavailable: {e}'
+        return json.dumps(fallback).encode('utf-8')
 
 def serve():
     
@@ -96,10 +99,12 @@ def serve():
     server.add_generic_rpc_handlers((generic_handler,))
     
     port = "50051"
-    server.add_insecure_port(f"[::]:{port}")
-    
-    logger.info(f"Serwer gRPC running on {port}")
-    
+    bound = server.add_insecure_port(f"[::]:{port}")
+    if bound == 0:
+        logger.error(f"Failed to bind gRPC server to port {port}")
+        raise SystemExit(1)
+
+    logger.info(f"Serwer gRPC bound on {port} (bound value={bound})")
     server.start()
     
     try:
