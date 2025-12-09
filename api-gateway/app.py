@@ -224,6 +224,29 @@ async def list_orders():
         }
     }
 
+
+# products endpoint - fetch via gRPC from order-processor which calls SOAP validator
+@app.get("/products")
+async def get_products():
+    if not GRPC_AVAILABLE:
+        raise HTTPException(status_code=503, detail="gRPC is not available")
+
+    try:
+        channel = grpc.insecure_channel(f"{GRPC_SERVICE_HOST}:{GRPC_SERVICE_PORT}")
+        # call the generic GetProducts method which returns JSON bytes
+        stub_call = channel.unary_unary(
+            '/order.OrderProcessor/GetProducts',
+            request_serializer=lambda x: b'',
+            response_deserializer=lambda x: json.loads(x.decode('utf-8'))
+        )
+
+        result = stub_call(b'')
+        channel.close()
+        return result.get('products', [])
+    except Exception as e:
+        logger.error(f"Error fetching products via gRPC: {e}")
+        raise HTTPException(status_code=503, detail=f"Product service unavailable: {e}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

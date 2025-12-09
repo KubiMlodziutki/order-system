@@ -26,4 +26,10 @@ public class ProductValidatorImpl implements ProductValidator {
         
         return isAvailable;
     }
+
+    @Override
+    public String[] getAvailableProducts() {
+        logger.info("Returning available products from validator");
+        return AVAILABLE_PRODUCTS.toArray(new String[0]);
+    }
 }

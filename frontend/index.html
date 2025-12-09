@@ -210,12 +210,6 @@
     <script>
         const API_URL = 'http://localhost:8000';
 
-        const products = [
-            { id: 'PROD-001', name: 'Mocbook Stone"', icon: '💻' },
-            { id: 'PROD-002', name: 'YouPhone X', icon: '📱' },
-            { id: 'PROD-007', name: 'Just headphones', icon: '🎧' }
-        ];
-
         // hateoas action config
         const actionConfig = {
             'cancel': { method: 'DELETE', label: '❌ Cancel Order', class: 'error' },
@@ -224,16 +218,31 @@
         };
 
         const productsContainer = document.getElementById('productsContainer');
-        productsContainer.innerHTML = products.map(product => `
-            <div class="product-card">
-                <div class="product-image-placeholder">${product.icon}</div>
-                <div class="product-info">
-                    <div class="product-name">${product.name}</div>
-                    <div class="product-id">${product.id}</div>
-                </div>
-                <button class="buy-btn" onclick="createOrder('${product.id}', this)">Buy Now</button>
-            </div>
-        `).join('');
+
+        async function loadProducts() {
+            productsContainer.innerHTML = '<div>Loading products...</div>';
+            try {
+                const res = await fetch(`${API_URL}/products`);
+                if (!res.ok) throw new Error('Failed to fetch products');
+                const products = await res.json();
+
+                productsContainer.innerHTML = products.map(product => `
+                    <div class="product-card">
+                        <div class="product-image-placeholder">${product.icon}</div>
+                        <div class="product-info">
+                            <div class="product-name">${product.name}</div>
+                            <div class="product-id">${product.id}</div>
+                        </div>
+                        <button class="buy-btn" onclick="createOrder('${product.id}', this)">Buy Now</button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                productsContainer.innerHTML = `<div style="color: red">Unable to load products: ${err.message}</div>`;
+            }
+        }
+
+        // load products on page start
+        loadProducts();
 
         // order creation
         async function createOrder(productId, btnElement) {

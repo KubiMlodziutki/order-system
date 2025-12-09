@@ -9,4 +9,7 @@ public interface ProductValidator {
     
     @WebMethod
     boolean validateProduct(@WebParam(name = "productId") String productId);
+
+    @WebMethod
+    String[] getAvailableProducts();
 }
