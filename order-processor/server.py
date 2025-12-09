@@ -50,7 +50,7 @@ def GetProducts_generic(unused_request, context):
         transport = Transport(session=session)
         soap_client = Client('http://product-validator:8080/ws/ProductValidator?wsdl', transport=transport)
         ids = soap_client.service.getAvailableProducts()
-        # enrich products with simple metadata (name/icon) - can be replaced with real store data
+        # enrich products with simple data
         name_map = {
             'PROD-001': ('Mocbook Stone', '💻'),
             'PROD-002': ('YouPhone X', '📱'),
@@ -74,7 +74,7 @@ def GetProducts_generic(unused_request, context):
 
 def serve():
     
-    # threadpool server creation
+    # server creation
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     
     # adding service to server
@@ -82,7 +82,7 @@ def serve():
         OrderProcessorServicer(), server
     )
 
-    # add a generic handler for GetProducts that returns JSON bytes
+    # handler for GetProducts that returns JSON bytes
     rpc_method_handlers = {
         'GetProducts': grpc.unary_unary_rpc_method_handler(
             GetProducts_generic,
