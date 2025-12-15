@@ -16,45 +16,44 @@ RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
 # email sending simulation
 # in real scenario we would use smtp etc or something different
 def send_email_notification(order_id: str, email: str):
-    logger.info(f"📧 Sending email notification...")
-    logger.info(f"   To: {email}")
-    logger.info(f"   Subject: Order confirmation {order_id}")
-    logger.info(f"   Content: Your Order {order_id} has been accepted for processing")
-    
-    # ssending lag simulation
+    logger.info(f"Sending email notification...")
+    logger.info(f"To: {email}")
+    logger.info(f"Subject: Order confirmation {order_id}")
+    logger.info(f"Content: Your Order {order_id} has been accepted for processing")
+
+    # sending lag simulation
     time.sleep(1)
     
-    logger.info(f"✓ Sent successfully for order {order_id}")
+    logger.info(f"Sent successfully for order {order_id}")
 
 # callback to process message from queue
 def callback(ch, method, properties, body):
     try:
-        # json parser
         message = json.loads(body)
-        
         logger.info(f"Received: {message}")
         
         order_id = message.get("order_id")
         email = message.get("email")
         notification_type = message.get("type", "unknown")
         
-        # notification based on type
         if notification_type == "order_confirmation":
             send_email_notification(order_id, email)
+        
+        elif notification_type == "status_update":
+            new_status = message.get("new_status")
+            logger.info(f"Status Update Notification for {order_id}: is now '{new_status}'")
+
+        elif notification_type == "order_cancellation":
+             logger.info(f"Order Cancelled Notification for {order_id}")
+             
         else:
-            logger.warning(f"Unknown notifcication type: {notification_type}")
-        
-        # Procesdsing confirmation
+            logger.warning(f"Unknown notification type: {notification_type}")
+            
         ch.basic_ack(delivery_tag=method.delivery_tag)
-        logger.info(f"Message processe dand confirmerd")
-        
-    except json.JSONDecodeError as e:
-        logger.error(f"Parsing JSON error : {e}")
-        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         
     except Exception as e:
-        logger.error(f"Erorr processing message: {e}")
-        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+        logger.error(f"Error processing message: {e}")
+        ch.basic_nack(delivery_tag=method.delivery_tag)
 
 def main():
     
@@ -100,7 +99,7 @@ def main():
         on_message_callback=callback
     )
     
-    logger.info("⏳ Waiting for messages...")
+    logger.info("Waiting for messages...")
     
     try:
         channel.start_consuming()

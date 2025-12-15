@@ -9,13 +9,15 @@ from zeep import Client
 from zeep.transports import Transport
 from requests import Session
 import logging
-import sys
 
-# logging info
+#  HATEOAS gen needs base URL
+API_GATEWAY_URL = os.getenv("API_GATEWAY_URL", "http://localhost:8000")
+
+# Setup logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# grpc import
+# Import gRPC
 try:
     import order_pb2
     import order_pb2_grpc
@@ -34,14 +36,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# config
+# Config
 SOAP_SERVICE_URL = os.getenv("SOAP_SERVICE_URL", "http://product-validator:8080/ws/ProductValidator?wsdl")
 GRPC_SERVICE_HOST = os.getenv("GRPC_SERVICE_HOST", "order-processor")
 GRPC_SERVICE_PORT = os.getenv("GRPC_SERVICE_PORT", "50051")
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
-API_GATEWAY_URL = os.getenv("API_GATEWAY_URL", "http://localhost:8000")
 
-# models
+
 class OrderRequest(BaseModel):
     product_id: str
     email: EmailStr
@@ -54,199 +55,202 @@ class OrderResponse(BaseModel):
     email: str
     quantity: int
     links: dict = Field(..., alias="_links")
-    
-    class Config:
-        populate_by_name = True
 
-# hateoas links generator
-def get_hateoas_links(order_id: str) -> dict:
-    return {
+
+def get_hateoas_links(order_id: str, current_status: str) -> dict:
+    links = {
         "self": {"href": f"{API_GATEWAY_URL}/orders/{order_id}"},
-        "status": {"href": f"{API_GATEWAY_URL}/orders/{order_id}/status"},
-        "cancel": {"href": f"{API_GATEWAY_URL}/orders/{order_id}/cancel"},
         "all-orders": {"href": f"{API_GATEWAY_URL}/orders"}
     }
-
-# soap validation method
-def validate_product_soap(product_id: str) -> bool:
-    try:
-        logger.info(f"Validation of {product_id} through SOAP...")
-        session = Session()
-        session.timeout = 10
-        transport = Transport(session=session)
-        soap_client = Client(SOAP_SERVICE_URL, transport=transport)
-        result = soap_client.service.validateProduct(product_id)
-        logger.info(f"SOAP validation result: {result}")
-        return result
-    except Exception as e:
-        logger.error(f"SOAP validation error: {str(e)}")
-        raise HTTPException(status_code=503, detail=f"Valdation service unavailable: {str(e)}")
-
-# order processing using grpc
-def process_order_grpc(product_id: str, email: str, quantity: int) -> str:
-    if not GRPC_AVAILABLE:
-        raise HTTPException(status_code=503, detail="gRPC is not available")
     
-    try:
-        logger.info(f"Order processing via gRPC...")
-        channel = grpc.insecure_channel(f"{GRPC_SERVICE_HOST}:{GRPC_SERVICE_PORT}")
-        stub = order_pb2_grpc.OrderProcessorStub(channel)
-        
-        request = order_pb2.OrderRequest(
-            product_id=product_id,
-            email=email,
-            quantity=quantity
-        )
-        
-        response = stub.ProcessOrder(request)
-        logger.info(f"Order has been processed, ID: {response.order_id}")
-        channel.close()
-        return response.order_id
-    except Exception as e:
-        logger.error(f"gRPC processing error: {str(e)}")
-        raise HTTPException(status_code=503, detail=f"Processing service unavailable: {str(e)}")
+    # dynamic links based on status
+    if current_status != "cancelled":
+         links["status"] = {"href": f"{API_GATEWAY_URL}/orders/{order_id}/status"}
+         links["cancel"] = {"href": f"{API_GATEWAY_URL}/orders/{order_id}/cancel"}
+    
+    return links
 
-# rabbitmq notif sender
-def send_notification_rabbitmq(order_id: str, email: str):
+def get_grpc_stub():
+    channel = grpc.insecure_channel(f"{GRPC_SERVICE_HOST}:{GRPC_SERVICE_PORT}")
+    return order_pb2_grpc.OrderProcessorStub(channel), channel
+
+def send_notification_rabbitmq(order_id: str, email: str, status: str):
     try:
-        logger.info(f"Sending notification to RabbitMQ...")
         credentials = pika.PlainCredentials('guest', 'guest')
-        parameters = pika.ConnectionParameters(
-            host=RABBITMQ_HOST,
-            credentials=credentials,
-            heartbeat=600,
-            blocked_connection_timeout=300
-        )
-        
-        connection = pika.BlockingConnection(parameters)
+        params = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=credentials)
+        connection = pika.BlockingConnection(params)
         channel = connection.channel()
         channel.queue_declare(queue='notifications', durable=True)
         
         message = {
             "order_id": order_id,
             "email": email,
-            "type": "order_confirmation"
+            "type": "status_update",
+            "new_status": status
         }
         
         channel.basic_publish(
             exchange='',
             routing_key='notifications',
-            body=json.dumps(message),
-            properties=pika.BasicProperties(delivery_mode=2)
+            body=json.dumps(message)
         )
-        
-        logger.info(f"Notification sent")
         connection.close()
     except Exception as e:
-        logger.error(f"Error sending to RabbitMQ: {str(e)}")
+        logger.error(f"RabbitMQ Error: {e}")
 
-# main endpoint
+# --- Endpoints ---
+
+@app.get("/products")
+async def get_products():
+    """
+    Frontend - Gateway - gRPC - SOAP - gRPC - Gateway - Frontend
+    """
+    if not GRPC_AVAILABLE:
+        raise HTTPException(status_code=503, detail="gRPC unavailable")
+    
+    try:
+        stub, channel = get_grpc_stub()
+
+        response = stub.GetAvailableProducts(order_pb2.Empty())
+        channel.close()
+        
+        # Protobuf -> JSON (Dict)
+        products_data = []
+        for p in response.products:
+            products_data.append({
+                "id": p.id,
+                "name": p.name,
+                "icon": p.icon
+            })
+            
+        return {"products": products_data}
+        
+    except grpc.RpcError as e:
+        logger.error(f"gRPC Error: {e}")
+        raise HTTPException(status_code=503, detail="Could not fetch products")
+
+@app.get("/orders")
+async def get_all_orders():
+    if not GRPC_AVAILABLE:
+        return {"orders": []}
+        
+    try:
+        stub, channel = get_grpc_stub()
+        response = stub.GetAllOrders(order_pb2.Empty())
+        channel.close()
+        
+        orders_data = []
+        for o in response.orders:
+            orders_data.append({
+                "order_id": o.order_id,
+                "status": o.status,
+                "product_id": o.product_id,
+                "email": o.email,
+                "quantity": o.quantity,
+                # HATEOAS 
+                "_links": get_hateoas_links(o.order_id, o.status)
+            })
+            
+        return {"orders": orders_data}
+        
+    except Exception as e:
+        logger.error(f"gRPC List Error: {e}")
+        raise HTTPException(status_code=503, detail="Could not fetch order list")
+
+@app.post("/orders", response_model=OrderResponse, status_code=201)
+async def create_order(order: OrderRequest):
+    try:
+        session = Session()
+        transport = Transport(session=session)
+        soap_client = Client(SOAP_SERVICE_URL, transport=transport)
+        is_valid = soap_client.service.validateProduct(order.product_id)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail="Product unavailable")
+    except Exception as e:
+        logger.error(f"SOAP Validation fail: {e}")
+
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=503, detail="Validator unavailable")
+
+    # przetwarzanie grpc
+    try:
+        stub, channel = get_grpc_stub()
+        grpc_req = order_pb2.OrderRequest(
+            product_id=order.product_id,
+            email=order.email,
+            quantity=order.quantity
+        )
+        response = stub.ProcessOrder(grpc_req)
+        channel.close()
+    except grpc.RpcError as e:
+        raise HTTPException(status_code=500, detail=f"Order processing failed: {e}")
+
+    # RabbitMQ
+    send_notification_rabbitmq(response.order_id, order.email, "created")
+
+    return {
+        "order_id": response.order_id,
+        "status": response.status,
+        "product_id": response.product_id,
+        "email": response.email,
+        "quantity": response.quantity,
+        "_links": get_hateoas_links(response.order_id, response.status)
+    }
+
+@app.get("/orders/{order_id}")
+async def get_order_details(order_id: str):
+    try:
+        stub, channel = get_grpc_stub()
+        response = stub.GetOrderStatus(order_pb2.OrderIdRequest(order_id=order_id))
+        channel.close()
+        
+        return {
+            "order_id": response.order_id,
+            "status": response.status,
+            "product_id": response.product_id,
+            "email": response.email,
+            "quantity": response.quantity,
+            "_links": get_hateoas_links(response.order_id, response.status)
+        }
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.NOT_FOUND:
+            raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@app.get("/orders/{order_id}/status")
+async def get_order_status_endpoint(order_id: str):
+    return await get_order_details(order_id)
+
+@app.get("/orders/{order_id}/cancel")
+async def cancel_order_get_helper(order_id: str):
+    return {"message": "Use DELETE method to cancel", "_links": get_hateoas_links(order_id, "unknown")}
+
+@app.delete("/orders/{order_id}/cancel")
+async def cancel_order(order_id: str):
+    try:
+        stub, channel = get_grpc_stub()
+        response = stub.CancelOrder(order_pb2.OrderIdRequest(order_id=order_id))
+        channel.close()
+        
+        send_notification_rabbitmq(response.order_id, response.email, "cancelled")
+        
+        return {
+            "message": "Order cancelled successfully",
+            "order_id": response.order_id,
+            "status": response.status,
+            "_links": get_hateoas_links(response.order_id, response.status)
+        }
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.NOT_FOUND:
+             raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=500, detail="Cancel failed")
+
 @app.get("/")
 async def root():
     return {
-        "message": "Order System API Gateway",
+        "message": "System v2.0",
         "_links": {
-            "self": {"href": f"{API_GATEWAY_URL}/"},
-            "orders": {"href": f"{API_GATEWAY_URL}/orders"},
-            "health": {"href": f"{API_GATEWAY_URL}/health"}
+            "products": {"href": f"{API_GATEWAY_URL}/products"},
+            "create_order": {"href": f"{API_GATEWAY_URL}/orders", "method": "POST"}
         }
     }
-
-# health check
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
-
-# creating order method + endpoint
-@app.post("/orders", response_model=OrderResponse, status_code=201)
-async def create_order(order: OrderRequest):
-    logger.info(f"Received order placement request: {order}")
-    
-    # soap validation
-    is_valid = validate_product_soap(order.product_id)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=f"Produt {order.product_id} is unavilable")
-    
-    # grpc processing
-    order_id = process_order_grpc(order.product_id, order.email, order.quantity)
-    
-    # rabbitmq sender
-    send_notification_rabbitmq(order_id, order.email)
-    
-    # hateoas response
-    response = OrderResponse(
-        order_id=order_id,
-        status="accepted",
-        product_id=order.product_id,
-        email=order.email,
-        quantity=order.quantity,
-        _links=get_hateoas_links(order_id)
-    )
-    
-    logger.info(f"Order {order_id} placed")
-    return response
-
-# get order main
-@app.get("/orders/{order_id}")
-async def get_order(order_id: str):
-    return {
-        "order_id": order_id,
-        "status": "processing",
-        "_links": get_hateoas_links(order_id)
-    }
-
-# order status
-@app.get("/orders/{order_id}/status")
-async def get_order_status(order_id: str):
-    return {
-        "order_id": order_id,
-        "status": "processing",
-        "last_updated": "2024-01-01T12:00:00Z",
-        "_links": get_hateoas_links(order_id)
-    }
-
-# order cancel
-@app.delete("/orders/{order_id}/cancel")
-async def cancel_order(order_id: str):
-    return {
-        "order_id": order_id,
-        "status": "cancelled",
-        "_links": get_hateoas_links(order_id)
-    }
-
-# list of orders
-@app.get("/orders")
-async def list_orders():
-    return {
-        "orders": [],
-        "_links": {
-            "self": {"href": f"{API_GATEWAY_URL}/orders"}
-        }
-    }
-
-
-# products endpoint - fetch via gRPC from order-processor which calls SOAP validator
-@app.get("/products")
-async def get_products():
-    if not GRPC_AVAILABLE:
-        raise HTTPException(status_code=503, detail="gRPC is not available")
-
-    try:
-        channel = grpc.insecure_channel(f"{GRPC_SERVICE_HOST}:{GRPC_SERVICE_PORT}")
-        # call the generic GetProducts method which returns JSON bytes
-        stub_call = channel.unary_unary(
-            '/order.OrderProcessor/GetProducts',
-            request_serializer=lambda x: b'',
-            response_deserializer=lambda x: json.loads(x.decode('utf-8'))
-        )
-
-        result = stub_call(b'')
-        channel.close()
-        return result.get('products', [])
-    except Exception as e:
-        logger.error(f"Error fetching products via gRPC: {e}")
-        raise HTTPException(status_code=503, detail=f"Product service unavailable: {e}")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

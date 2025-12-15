@@ -42,8 +42,10 @@ services:
     container_name: order-system-product-validator
     ports:
       - "8080:8080"
+    volumes:
+      - ./products.json:/app/data/products.json # Mounting the products.json file
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget --spider -q http://localhost:8080/ws/ProductValidator?wsdl || exit 1"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/ws/ProductValidator?wsdl"]
       interval: 10s
       timeout: 5s
       retries: 10

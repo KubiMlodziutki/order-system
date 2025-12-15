@@ -4,7 +4,15 @@ package order;
 
 service OrderProcessor {
   rpc ProcessOrder (OrderRequest) returns (OrderResponse);
+  rpc GetAvailableProducts (Empty) returns (ProductList);
+
+  rpc GetOrderStatus (OrderIdRequest) returns (OrderResponse);
+  rpc CancelOrder (OrderIdRequest) returns (OrderResponse);
+
+  rpc GetAllOrders (Empty) returns (OrderList);
 }
+
+message Empty {}
 
 message OrderRequest {
   string product_id = 1;
@@ -12,7 +20,27 @@ message OrderRequest {
   int32 quantity = 3;
 }
 
+message OrderIdRequest {
+  string order_id = 1;
+}
+
 message OrderResponse {
   string order_id = 1;
   string status = 2;
+  string product_id = 3;
+  string email = 4;
+  int32 quantity = 5;
+}
+
+message Product {
+  string id = 1;
+  string name = 2;
+  string icon = 3;
+}
+
+message ProductList {
+  repeated Product products = 1;
+}
+message OrderList {
+  repeated OrderResponse orders = 1;
 }

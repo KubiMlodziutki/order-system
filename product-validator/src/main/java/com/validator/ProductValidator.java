@@ -11,5 +11,5 @@ public interface ProductValidator {
     boolean validateProduct(@WebParam(name = "productId") String productId);
 
     @WebMethod
-    String[] getAvailableProducts();
+    Product[] getAvailableProducts();
 }

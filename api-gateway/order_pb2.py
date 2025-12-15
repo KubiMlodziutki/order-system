@@ -14,17 +14,27 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0border.proto\x12\x05order\"C\n\x0cOrderRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\r\n\x05\x65mail\x18\x02 \x01(\t\x12\x10\n\x08quantity\x18\x03 \x01(\x05\"1\n\rOrderResponse\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t2K\n\x0eOrderProcessor\x12\x39\n\x0cProcessOrder\x12\x13.order.OrderRequest\x1a\x14.order.OrderResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0border.proto\x12\x05order\"\x07\n\x05\x45mpty\"C\n\x0cOrderRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\r\n\x05\x65mail\x18\x02 \x01(\t\x12\x10\n\x08quantity\x18\x03 \x01(\x05\"\"\n\x0eOrderIdRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"f\n\rOrderResponse\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\x12\x12\n\nproduct_id\x18\x03 \x01(\t\x12\r\n\x05\x65mail\x18\x04 \x01(\t\x12\x10\n\x08quantity\x18\x05 \x01(\x05\"1\n\x07Product\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0c\n\x04icon\x18\x03 \x01(\t\"/\n\x0bProductList\x12 \n\x08products\x18\x01 \x03(\x0b\x32\x0e.order.Product\"1\n\tOrderList\x12$\n\x06orders\x18\x01 \x03(\x0b\x32\x14.order.OrderResponse2\xb0\x02\n\x0eOrderProcessor\x12\x39\n\x0cProcessOrder\x12\x13.order.OrderRequest\x1a\x14.order.OrderResponse\x12\x38\n\x14GetAvailableProducts\x12\x0c.order.Empty\x1a\x12.order.ProductList\x12=\n\x0eGetOrderStatus\x12\x15.order.OrderIdRequest\x1a\x14.order.OrderResponse\x12:\n\x0b\x43\x61ncelOrder\x12\x15.order.OrderIdRequest\x1a\x14.order.OrderResponse\x12.\n\x0cGetAllOrders\x12\x0c.order.Empty\x1a\x10.order.OrderListb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'order_pb2', _globals)
 if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
-  _globals['_ORDERREQUEST']._serialized_start=22
-  _globals['_ORDERREQUEST']._serialized_end=89
-  _globals['_ORDERRESPONSE']._serialized_start=91
-  _globals['_ORDERRESPONSE']._serialized_end=140
-  _globals['_ORDERPROCESSOR']._serialized_start=142
-  _globals['_ORDERPROCESSOR']._serialized_end=217
+  _globals['_EMPTY']._serialized_start=22
+  _globals['_EMPTY']._serialized_end=29
+  _globals['_ORDERREQUEST']._serialized_start=31
+  _globals['_ORDERREQUEST']._serialized_end=98
+  _globals['_ORDERIDREQUEST']._serialized_start=100
+  _globals['_ORDERIDREQUEST']._serialized_end=134
+  _globals['_ORDERRESPONSE']._serialized_start=136
+  _globals['_ORDERRESPONSE']._serialized_end=238
+  _globals['_PRODUCT']._serialized_start=240
+  _globals['_PRODUCT']._serialized_end=289
+  _globals['_PRODUCTLIST']._serialized_start=291
+  _globals['_PRODUCTLIST']._serialized_end=338
+  _globals['_ORDERLIST']._serialized_start=340
+  _globals['_ORDERLIST']._serialized_end=389
+  _globals['_ORDERPROCESSOR']._serialized_start=392
+  _globals['_ORDERPROCESSOR']._serialized_end=696
 # @@protoc_insertion_point(module_scope)

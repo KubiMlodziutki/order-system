@@ -1,7 +1,11 @@
 package com.validator;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.jws.WebService;
-import java.util.Arrays;
+import java.io.File;
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -9,27 +13,40 @@ import java.util.logging.Logger;
 public class ProductValidatorImpl implements ProductValidator {
     
     private static final Logger logger = Logger.getLogger(ProductValidatorImpl.class.getName());
+    private List<Product> productsCache;
     
-    // simulation of available list
-    private static final List<String> AVAILABLE_PRODUCTS = Arrays.asList(
-        "PROD-001", "PROD-002", "PROD-003", "PROD-004", "PROD-005"
-    );
+    public ProductValidatorImpl() {
+        loadProducts();
+    }
+
+
+    private void loadProducts() {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            // path inside the container
+            File file = new File("/app/data/products.json");
+            if (file.exists()) {
+                productsCache = mapper.readValue(file, new TypeReference<List<Product>>(){});
+                logger.info("Loaded " + productsCache.size() + " products from JSON");
+            } else {
+                logger.warning("products.json not found at " + file.getAbsolutePath());
+                productsCache = Collections.emptyList();
+            }
+        } catch (IOException e) {
+            logger.severe("Error reading JSON: " + e.getMessage());
+            productsCache = Collections.emptyList();
+        }
+    }
     
     @Override
     public boolean validateProduct(String productId) {
-        logger.info("Product vaidation: " + productId);
-        
-        // availability check
-        boolean isAvailable = AVAILABLE_PRODUCTS.contains(productId);
-        
-        logger.info("Product " + productId + " - available: " + isAvailable);
-        
-        return isAvailable;
+        // availability check against cached products
+        return productsCache.stream()
+                .anyMatch(p -> p.getId().equals(productId));
     }
 
     @Override
-    public String[] getAvailableProducts() {
-        logger.info("Returning available products from validator");
-        return AVAILABLE_PRODUCTS.toArray(new String[0]);
+    public Product[] getAvailableProducts() {
+        return productsCache.toArray(new Product[0]);
     }
 }
