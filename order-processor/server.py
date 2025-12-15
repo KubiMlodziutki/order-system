@@ -21,15 +21,6 @@ SOAP_SERVICE_URL = os.getenv("SOAP_SERVICE_URL", "http://product-validator:8080/
 # database (in-memory)
 orders_db = {}
 
-# product metadata cache
-PRODUCT_METADATA = {
-    "PROD-001": {"name": "Laptop Gamingowy", "icon": "💻"},
-    "PROD-002": {"name": "Smartfon 5G", "icon": "📱"},
-    "PROD-003": {"name": "Słuchawki Noise Cancel", "icon": "🎧"},
-    "PROD-004": {"name": "Klawiatura Mechaniczna", "icon": "⌨️"},
-    "PROD-005": {"name": "Monitor 4K", "icon": "🖥️"}
-}
-
 def update_order_status_based_on_time(order):
     if order['status'] == 'cancelled':
         return
