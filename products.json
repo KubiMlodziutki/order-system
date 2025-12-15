@@ -1,8 +1,8 @@
 [
-    {"id": "PROD-001", "name": "Laptop Gamingowy", "icon": "💻"},
-    {"id": "PROD-002", "name": "Smartfon 5G", "icon": "📱"},
-    {"id": "PROD-003", "name": "Słuchawki Pro", "icon": "🎧"},
-    {"id": "PROD-004", "name": "Klawiatura Mech", "icon": "⌨️"},
+    {"id": "PROD-001", "name": "Laptop", "icon": "💻"},
+    {"id": "PROD-002", "name": "Phone", "icon": "📱"},
+    {"id": "PROD-003", "name": "Headphones", "icon": "🎧"},
+    {"id": "PROD-004", "name": "Keyboard", "icon": "⌨️"},
     {"id": "PROD-005", "name": "Monitor 4K", "icon": "🖥️"},
     {"id": "PROD-006", "name": "Monitor 8K", "icon": "🖥️"}
 ]
